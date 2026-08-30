@@ -1,0 +1,55 @@
+name: Bug report
+description: Something behaves differently from SAP's PyRFC, or not as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The single most useful thing you can include is
+        **what SAP's PyRFC did with the same input** — a behavioural difference
+        is far more actionable than a description of the symptom.
+
+        Please redact credentials, hostnames and business data first.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest script that shows it. Redact connection details.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: interface
+    attributes:
+      label: The function module's interface
+      description: >
+        If it involves a specific module, its interface decides almost
+        everything — parameter types, widths and directions.
+        `conn.get_function_description("YOUR_FM")` or an SE37 screenshot.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: erpl-pyrfc version
+      placeholder: "python -c 'import pyrfc; print(pyrfc.__version__)'"
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Python, OS and SAP kernel
+      placeholder: "Python 3.12, Ubuntu 24.04, SAP kernel 7.53"
+    validations:
+      required: true
+  - type: textarea
+    id: reference
+    attributes:
+      label: What SAP PyRFC does with the same input
+      description: If you can still run it. "Haven't tried" is a fine answer.

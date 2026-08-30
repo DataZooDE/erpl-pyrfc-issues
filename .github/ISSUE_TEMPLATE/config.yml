@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Migration guide
+    url: https://github.com/DataZooDE/erpl-pyrfc-issues/blob/main/MIGRATION.md
+    about: Moving from SAP's PyRFC — what is the same, what differs, what is absent.
+  - name: How this was built
+    url: https://erpl.io/blog/drop-in-replacement-for-archived-pyrfc/
+    about: The story behind the library, and the clean-room method.
+  - name: Talk to me on LinkedIn
+    url: https://www.linkedin.com/in/joachim-rosskopf/
+    about: Questions, war stories, or how you test SAP integrations.

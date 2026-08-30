@@ -1,0 +1,31 @@
+name: PyRFC compatibility gap
+description: Code that worked against SAP's PyRFC does not work here.
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The goal is that `import pyrfc` keeps working unchanged. If something
+        you relied on is missing or differs, that is a defect in this library
+        unless `MIGRATION.md` names it as a deliberate non-goal.
+  - type: input
+    id: api
+    attributes:
+      label: The API involved
+      placeholder: "pyrfc.Connection.get_unit_state, pyrfc.RfcFieldType, …"
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Code that worked before
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: What happens now
+      description: The traceback, or the differing value.
+    validations:
+      required: true
