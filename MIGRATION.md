@@ -1,7 +1,6 @@
 <!--
-Published copy of the migration guide. The library's source is not public; this
-file is, because the blog post and the package metadata both point people here
-and a link into a private repository helps nobody.
+Published copy. The library's source is not public; this file is, because
+the package metadata and the blog post both point people here.
 -->
 
 # Migrating from SAP PyRFC
@@ -80,6 +79,39 @@ conn.confirm_unit(unit)          # this is what releases the work
 
 Pass `queue_names=["MY_QUEUE"]` for qRFC. `destroy_unit(unit)` abandons without
 confirming, leaving the TID on the server so the work can be retried.
+
+## The module surface
+
+Every module-level name PyRFC exposed is here: `cancel_connection`,
+`get_nwrfclib_version`, `language_iso_to_sap` / `language_sap_to_iso`,
+`set_locale_radix`, `set_ini_file_directory`, `reload_ini_file`,
+`set_cryptolib_path`, the enums `RfcFieldType`, `RfcParameterDirection`,
+`RCStatus`, `UnitState` and `UnitCallType`, the descriptions
+`TypeDescription`, `FunctionDescription` and `ConnectionParameters`, and
+`Decimal`.
+
+The enum values are the SDK's own numbers, not renumbered — code that stores or
+compares them keeps working. The language table maps the same 40 ISO codes the
+reference does, including the ones a first-letter guess gets wrong (Danish is
+`K`, Swedish `V`) and the digits used for non-Latin scripts.
+
+Four behave differently, and each says so rather than pretending:
+
+- **`set_ini_file_directory`, `reload_ini_file`** raise `NotImplementedError`.
+  `sapnwrfc.ini` is an SDK feature; pass connection parameters to `Connection`.
+- **`set_cryptolib_path`** raises. SNC is configured per connection here via
+  `snc_lib`, which is what lets two connections use different libraries at once.
+- **`set_locale_radix`** always returns `.` and refuses anything else. The
+  reference needs it because the SDK parses decimals through the C locale; this
+  library parses them itself and is not affected.
+
+**`get_nwrfclib_version()` reports this package's version**, in the SDK's shape.
+There is no SDK to report on. Code that logs it keeps working; code comparing it
+against an SDK patch level was reading a number that no longer describes
+anything.
+
+Two spellings differ in kind rather than degree:
+`pyrfc.cancel_connection(conn)` and `conn.cancel()` both work, as in PyRFC.
 
 ## Deliberate non-goals
 

@@ -1,0 +1,205 @@
+<!--
+Published copy. The library's source is not public; this file is, because
+the package metadata and the blog post both point people here.
+-->
+
+# Changelog
+
+## 2026.9.1
+
+Release gate run on 2026-08-31 against the a4h ABAP Platform Trial (kernel
+7.58): **453 Rust tests and 263 Python tests, no failures and no skips**, with
+SNC, wsRFC and the async driver all enabled.
+
+### Fixed
+
+- **The package's own links no longer 404.** `Homepage` and `Issues` pointed at
+  a repository that is not public, so every reader following them -- including
+  from the "Issues" link on the PyPI page, which is where a bug report starts --
+  got GitHub's 404. They now point at
+  [erpl-pyrfc-issues](https://github.com/DataZooDE/erpl-pyrfc-issues), which
+  carries the tracker, the migration guide, this changelog and the runnable
+  examples.
+
+### Added
+
+- **The rest of PyRFC's module surface** — 17 names that were missing, so that
+  `from pyrfc import ...` works for everything the reference exported.
+  `pyrfc.cancel_connection(conn)` in particular was an `AttributeError` where
+  PyRFC has a working function; the capability existed as `conn.cancel()` but
+  under a name PyRFC callers do not use.
+
+  The enums (`RfcFieldType`, `RfcParameterDirection`, `RCStatus`, `UnitState`,
+  `UnitCallType`) carry the SDK's own numeric values, read off the reference
+  rather than chosen, because callers store and compare them.
+
+  The ISO/SAP language table was derived by asking the reference for all 676
+  two-letter combinations and keeping the 40 that answered with a printable
+  character *and* round-tripped. Unmapped codes do not fail there — they return
+  an arbitrary character — so round-tripping is what separates a mapping from
+  noise. Here an unmapped code raises instead, since a caller cannot otherwise
+  tell a real key from a wrong one.
+
+  `set_ini_file_directory`, `reload_ini_file` and `set_cryptolib_path` raise
+  `NotImplementedError`: they configure the SDK, and a connection that silently
+  did not use the destination you configured is worse than one that says so.
+
+
+## 2026.8.31
+
+Release gate run on 2026-08-30 against the a4h ABAP Platform Trial (kernel
+7.58): **437 Rust tests and 208 Python tests, no failures and no skips**, with
+SNC, wsRFC and the async driver all enabled.
+
+### Added
+
+- **`Throughput` monitoring.** The same class PyRFC had, with the same seven
+  `stats` keys, the same attach/detach methods, and the same details a caller
+  could depend on — one monitor summing several connections, metadata lookups
+  counting as calls, `getFromConnection` preserving object identity, `reset`
+  zeroing without detaching.
+
+  Verified side by side against the real PyRFC 3.3.1 on an identical call:
+  `numberOfCalls` and `receivedBytes` match exactly. `sentBytes` is lower
+  because SAP's client sends a session preamble on its first call that this one
+  omits — the basis is the same, there is simply less traffic.
+
+  `stats_ns` is an addition with no PyRFC equivalent: the same counters
+  unrounded, plus `networkWriteTime` and `replyWaitTime`. Times in `stats` are
+  milliseconds, so `serializationTime` reads 0 for ordinary calls, exactly as
+  the reference reports it.
+
+  Nothing is measured until a monitor is attached — the connection checks
+  before it reads a clock, and a test asserts that an unattached call takes
+  zero timestamps.
+
+  Previously a documented non-goal on the grounds that these were
+  "SDK-internal counters that do not exist here". That was wrong: they are
+  ordinary measurements at a client's own API boundary. Only `serverTime` needs
+  the backend to report it, and PyRFC never exposed that one.
+
+### Fixed
+
+- **`ABAP object/class types` was never a real non-goal**, and no longer
+  appears as one. Listing it implied PyRFC could pass an ABAP object where this
+  package could not; neither can. PyRFC re-exports the SDK's
+  `RfcFieldType.RFCTYPE_ABAPOBJECT` constant and offers no API around it, and
+  the ABAP kernel refuses an object reference in an RFC interface at all —
+  FL393, *"You can only use LIKE and TYPE to specify types in RFC"*. Measured
+  on kernel 7.58 by every route the interface tables allow, with the same
+  parameter accepted the moment the RFC flag is off; 5,916 object-reference
+  parameters exist there and none is on any of the 22,931 RFC-enabled modules.
+
+  Recorded as spec META-7 and re-measured on every test run by the
+  `Z_ERPL_OBJ_TRIPWIRE` fixture, so a kernel that relaxes the rule is reported
+  rather than assumed away.
+
+## 2026.8.30
+
+Release gate run on 2026-08-30 against the a4h ABAP Platform Trial (kernel
+7.58): **414 Rust tests and 190 Python tests, no failures and no skips**, with
+SNC, wsRFC and the async driver all enabled.
+
+### Added
+
+- **basXML serialization, transparently.** SAP marks some function modules as
+  basXML-serialized (`TFDIR-FMODE = 'X'`) and the SDK uses that encoding for
+  them without being asked, which is why PyRFC exposes no API for it. Calls to
+  such a module now work here too, and return what the classic encoding would
+  have returned — same values, same types, same padding. Previously they were
+  a documented non-goal.
+
+  `basxml=False` in the connection parameters forces the classic encoding
+  everywhere. It is an escape hatch, not a feature: the server chooses, and a
+  client can decline but not impose.
+
+### Fixed
+
+- **BASXML is no longer a non-goal**, and the entries saying so in
+  `MIGRATION.md` and `OPEN_POINTS.md` are retracted. (This entry also called
+  `ABAP object/class types` a non-goal; that was wrong and is corrected in
+  the next release — see below.)
+
+## 2026.8.29.1
+
+Two compatibility fixes, both found by running the same script under SAP's
+PyRFC 3.3.1 and under this package and diffing the output — see
+`examples/run_both.sh`, which is that comparison as a script anyone can run.
+
+Release gate run on 2026-08-29 against the a4h ABAP Platform Trial (kernel
+7.58): **378 Rust tests and 182 Python tests, no failures and no skips**, with
+SNC, wsRFC and the async driver all enabled.
+
+### Fixed
+
+- **`get_connection_attributes()["language"]` reported the caller's `EN` rather
+  than the `E` that was logged on with.** SAP maps a language to its
+  one-character code before sending it, and its own client reports that form
+  here. This was the only field the two libraries disagreed on.
+
+- **A connection was left permanently broken after a `MESSAGE`-raised failure
+  when the metadata cache was cold.** ABAP drops the conversation after such a
+  failure and the gateway reports it on the *next* call, which the binding
+  recovers from by reopening and re-issuing. But when that next call also had
+  to fetch the function's interface, the dead conversation was found by the
+  metadata round trip, whose failure returned directly and skipped the recovery
+  — so every later call on that connection failed too.
+
+  The suite could not see it: the metadata cache is shared by the whole
+  process, so any earlier call on the same function left it warm and moved the
+  failure onto the call, which did recover. The regression test for it now runs
+  in a subprocess, which is the only place the cold path is real.
+
+### Added
+
+- `examples/`, four runnable examples exercised by the suite rather than only
+  shipped: the install wall a new machine hits, the side-by-side against real
+  PyRFC 3.3.1, and a tour of the migration surface.
+
+## 2026.8.29
+
+First release. Release gate run on 2026-08-29 against the a4h ABAP Platform
+Trial (kernel 7.58): **378 Rust tests and 176 Python tests, no failures and no
+skips**, with SNC, wsRFC and the async driver all enabled. A PyRFC-compatible SAP RFC client over a pure-Rust protocol
+core, with no SAP NW RFC SDK and no ICU.
+
+Versions are calendar dates, `YYYY.M.D`, as the erpl projects use. An earlier
+plan to start at `4.0.0` — on the grounds that SAP's PyRFC ended at 3.x — was
+dropped: the two distributions are separately named, so nothing ever compares
+one version to the other.
+
+Not yet used in anger by anyone but us.
+
+### Works
+
+Connections (direct, load-balanced, saprouter), `call()` with full dict and
+table marshalling, the exception hierarchy with `code`/`key`/`msg_*`, the
+config options (`rstrip`, `dtime`, `return_import_params`, `timeout`),
+`get_connection_attributes`, `get_function_description`, the inbound `Server`,
+and classic tRFC/qRFC units. Every ABAP scalar round-trips exactly, including
+INT8 past 2^53, DECFLOAT34 at 34 digits, and UTCLONG.
+
+**SNC** through the `snc_*` parameter family. **`cancel()`** stops the running
+ABAP, and `timeout` cancels rather than abandoning the conversation while the
+function runs on.
+
+**wsRFC** is an extension beyond PyRFC: X.509 client-certificate sign-on over a
+WebSocket. It is X.509-only, because every other wsRFC client credential
+funnels through a proprietary assertion that cannot be reproduced outside
+SAP's own crypto library.
+
+Anything that cannot be honoured is refused rather than quietly downgraded —
+an incomplete SNC configuration, a certificate without its key, SNC asked for
+on a WebSocket, two routes at once.
+
+### Differences from PyRFC
+
+`MIGRATION.md` is the contract. The short version: bgRFC units, throughput
+monitoring, ABAP object types and BASXML are deliberate non-goals and fail
+loudly; `handle` is a counter rather than an SDK pointer; and a connection may
+be handed to another thread to `cancel()` it, though calls still serialise.
+
+*(Three of those four did not survive. BASXML shipped in 2026.8.30, throughput
+monitoring and the correction to the ABAP-object claim are in the entry at the
+top of this file. `MIGRATION.md` remains the contract; this paragraph is what
+was true at this release.)*
