@@ -113,6 +113,15 @@ anything.
 Two spellings differ in kind rather than degree:
 `pyrfc.cancel_connection(conn)` and `conn.cancel()` both work, as in PyRFC.
 
+**`cancel_connection` refuses a non-connection instead of swallowing it.**
+Given something that is not a `Connection`, SAP's prints a traceback to stderr
+and returns `None`; this one raises `TypeError`. Found by running both
+libraries against the same script and diffing. Reproducing a swallowed type
+error would mean a caller cannot tell a cancelled call from a call that never
+happened, which is the same reasoning as the language table above: where the
+reference's behaviour makes a mistake indistinguishable from success, this
+package raises.
+
 ## Deliberate non-goals
 
 These are not planned. If your code needs one, this package is not a drop-in for

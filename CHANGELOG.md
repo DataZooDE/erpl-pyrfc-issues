@@ -5,6 +5,47 @@ the package metadata and the blog post both point people here.
 
 # Changelog
 
+## 2026.9.2
+
+Release gate run on 2026-09-01 against the a4h ABAP Platform Trial (kernel
+7.58): **463 Rust tests and 263 Python tests, no failures and no skips**, with
+SNC, wsRFC and the async driver all enabled.
+
+### Fixed
+
+Six defects, all in code that shipped in 2026.9.1. Every one of them either
+succeeded on the classic encoding or failed with a message naming nothing,
+which is how they reached a release.
+
+- **ODP replication was broken** (erpl-proto#53). `RODPS_REPL_ODP_FETCH_XML`
+  answered every call with an ABAP short dump. Three defects, each alone
+  sufficient, found by capturing SAP's own library making the same call and
+  diffing the request:
+
+  - A name XML reserves must be escaped. XML forbids any name beginning with
+    `xml`, and asXML inserts a hyphen after the first character, so the field
+    `XML_FORMAT` goes on the wire as `X-ML_FORMAT`.
+  - A packed decimal must carry its declared scale: a nine-decimal element is
+    `0.000000000`, not `0`. The scale lives in the DDIC element rather than
+    the interface, and the renderer was ignoring the one it already had, so
+    structure fields were affected too.
+  - Every table the function declares appears in the request, in metadata
+    order, empty if unsupplied — including one that only carries results back.
+
+  With all three, the request is byte-identical to the reference's.
+
+- **A `CHANGING` parameter typed `Table` was dropped** (erpl-proto#57). A table
+  says so either by its direction or by its own type, and only the first was
+  honoured. basXML then refused the call locally; the classic encoding sent it
+  and ABAP short-dumped.
+
+- **A table row arriving without its alignment padding was refused**
+  (erpl-proto#54). The declared width is the row padded to its alignment and
+  the server sends the fields without it, so a 32-byte row arrives as 29.
+
+`ERPL_DUMP_BASXML=1` prints a basXML request document, as `ERPL_DUMP_FIELDS`
+prints a reply's fields. Every ODP defect above was read off that dump.
+
 ## 2026.9.1
 
 Release gate run on 2026-08-31 against the a4h ABAP Platform Trial (kernel
