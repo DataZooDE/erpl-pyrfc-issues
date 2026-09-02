@@ -1,9 +1,58 @@
-<!--
-Published copy. The library's source is not public; this file is, because
-the package metadata and the blog post both point people here.
--->
-
 # Changelog
+
+## 2026.9.2.1
+
+Release gate run on 2026-09-02 against the a4h ABAP Platform Trial (kernel
+7.58): **506 Rust tests and 263 Python tests, no failures and no skips**, with
+SNC, wsRFC and the async driver all enabled. erpl's own suites through the
+C-ABI shim: rfc 31/32 (the nwrfc-only backend file skips), odp 24/25 (a delta
+cursor the server refuses to close on SAP's library too), bics 45/45.
+
+### Changed
+
+- **A reply table is one image, and rows are views into it** (erpl-proto#61).
+  `Table::rows` is now a `Rows` view over the inflated stream — `len()`,
+  `get(i)`, `iter()`, indexing — instead of a `Vec<Vec<u8>>` cut out of it
+  one allocation per row while the stream was still alive. Decoding 32,768
+  rows of `RFC_READ_TABLE` went from 32,786 allocations to under 64. Rows
+  shorter than the declared width are padded to it on receipt (spec TBL-1)
+  and a wider row is refused rather than cut. Rust callers that held
+  `&[Vec<u8>]` use `rows()` the same way; `to_vec()` gives the old shape.
+- **The C-ABI shim no longer builds a container per row.** The reply's
+  image is moved into the table container, a row handle is packed into the
+  pointer (spec ABI-21), `RfcGetChars` copies UTF-16 straight into the
+  caller's buffer with blank padding, and a held row handle is reported
+  `RFC_INVALID_HANDLE` once the rows are replaced or the function destroyed.
+  Measured through the ABI on a4h with eight concurrent readers of
+  `REPOSRC`: process high-water mark 669 MB → 268 MB, 75 MB → 33 MB per
+  reader for a 32 MB batch (the reference: 36), registry entries per batch
+  229,000 → 26.
+- **Less work per call and per row elsewhere.** The function interface is no
+  longer cloned on every call, the deep XML section is parsed once, a
+  received record's payload is no longer copied out of its frame, and
+  `StructureMeta::decode_ref` decodes a row without copying every field name
+  — which is what the Python binding now uses per row.
+
+### Fixed
+
+- **A basXML reply carrying a deep parameter was refused** (erpl-proto#60).
+  A deep structure, or a table outside the TABLES position, arrives in a
+  basXML reply with its members nested — a row's member may itself be a table
+  (`TTYP`) or a structure (`STRU`) — and the decoder imaged every parameter
+  flat, refusing the first nested table it met with *"a Table cannot be
+  rendered from a structured value"*, naming a member no function declares.
+  Every BICS metadata module is basXML-flagged, so erpl's BICS suite went
+  from 45/45 to 23/45 on 2026.9.2. Such a parameter is now delivered as the
+  classic encoding delivers it, a `DeepElement` tree in `deep_tree`/`deep`,
+  and the two encodings are asserted identical on a live BICS flow (spec
+  BXML-14). One visible shift for the Rust API: a basXML deep-structure export
+  whose members happen to be flat now lands in `deep_tree` rather than in
+  `values` as bytes — which is where the classic reply already put it.
+- **A basXML structure image carried its alignment padding** where a classic
+  one does not (spec TBL-1); rebuilt images are now sized to the fields' extent.
+- Nested `STRU` members of imaged structures and rows are rebuilt from their
+  own layouts, and on the request side expanded, with a nested `TTYP` member
+  sent empty; previously either was refused.
 
 ## 2026.9.2
 

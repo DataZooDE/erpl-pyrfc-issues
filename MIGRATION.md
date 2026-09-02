@@ -1,8 +1,3 @@
-<!--
-Published copy. The library's source is not public; this file is, because
-the package metadata and the blog post both point people here.
--->
-
 # Migrating from SAP PyRFC
 
 One page: what runs unchanged, what is deliberately absent, and where behaviour
@@ -165,7 +160,7 @@ interface with FL393, *"You can only use LIKE and TYPE to specify types in
 RFC"*. Measured on kernel 7.58, where 5,916 object-reference parameters exist
 system-wide and none of them is on any of the 22,931 RFC-enabled function
 modules. See spec META-7; the refusal is re-measured on every test run by
-the project's live test suite.
+`crates/erpl-proto/tests/live_abap_objects.rs`.
 
 ## SNC
 
