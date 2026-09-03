@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026.9.3
+
+Release gate run on 2026-09-03 against the a4h ABAP Platform Trial (kernel
+7.58): **509 Rust tests and 263 Python tests, no failures and no skips**, with SNC, wsRFC, the async driver and a SAProuter all live. erpl's own suites through the C-ABI shim: rfc 31/32 (the
+nwrfc-only backend file skips), bics 45/45.
+
+### Fixed
+
+Found by a six-persona review of the released #61 implementation, before any
+report from the field:
+
+- **A hostile row width could allocate gigabytes.** The reply's `TableHeader`
+  row width is the server's to choose and every row was padded to it; a 4 GiB
+  width over a 2-byte row allocated 4 GiB per row. The width is now capped at
+  the layouts' limit before any row is stored.
+- **A row handle could alias another row after 4,096 replacements** of the
+  same table's rows, because the twelve-bit generation wrapped. It no longer
+  wraps: past the last generation the table refuses to issue row handles
+  (`RFC_TABLE_UNADDRESSABLE`) until the function is recreated.
+- **A truncated chunked table stream was returned as a smaller table** when
+  its length happened to divide evenly by the row width; it is reported as
+  undecodable.
+- The layout-less `WA` read allocated on every call; it no longer does.
+
 ## 2026.9.2.1
 
 Release gate run on 2026-09-02 against the a4h ABAP Platform Trial (kernel
