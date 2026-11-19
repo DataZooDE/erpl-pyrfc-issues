@@ -1,5 +1,67 @@
 # Changelog
 
+## 2026.11.19
+
+Release gate run on 2026-11-19 against the a4h ABAP Platform Trial (release
+816, kernel 9.16): **537 Rust tests and 263 Python tests passed**, with SNC, wsRFC, the async driver and a
+message server live. One Rust test fails and fails identically on the previous `main`:
+`live_basxml`'s classic-versus-basXML comparison of `BICS_PROV_GET_INITIAL_STATE`
+(rows of 734 bytes over basXML against 736 classic: a padding mismatch in the basXML
+path, most likely exposed by the system update, and still open. It can affect a
+basXML-enabled module whose table row type has trailing alignment padding). Skipped: the three SAProuter tests (no
+router running) and the C++ consumer test. erpl's suite through the C-ABI shim: rfc
+34/35 (the nwrfc-only backend file skips).
+
+### Changed
+
+- **ABAP errors are classified the way SAP's PyRFC classifies them.** Measured
+  field by field on a4h: every `RFC_RAISE_ERROR` method and message type,
+  `STFC_SAPGUI`, and this package's own error tests run under SAP's PyRFC.
+  *How* a failure was raised decides the class, not the message type:
+
+  | raised by | exception | `code` |
+  |---|---|---|
+  | a declared exception | `ABAPApplicationError` | 5 |
+  | ABAP `MESSAGE` (any type, E included) | `ABAPRuntimeError` | 4 |
+  | a short dump | `ABAPRuntimeError` | 3 |
+
+  **If you catch `ABAPApplicationError` for a `MESSAGE`-raised failure, catch
+  `ABAPRuntimeError` instead** — as you would with SAP's PyRFC. A declared
+  exception with a type-X message is now `ABAPApplicationError`. A message of a
+  type ABAP does not have (`RFC_RAISE_ERROR MESSAGETYPE=0`) is a short dump with
+  key `MESSAGE_TYPE_UNKNOWN` and no T100 identity, as in SAP's PyRFC.
+  `str(error)` is still rendered differently from SAP's PyRFC; that is unchanged.
+
+### Fixed
+
+- **A short dump was raised as `ABAPApplicationError`** since the core stopped
+  reporting the dump's `00`/`341` wrapper as a message. `STFC_SAPGUI` is
+  `ABAPRuntimeError`, code 3, key `DYNPRO_SEND_IN_BACKGROUND` again — now with
+  no placeholder T100 identity, matching SAP's PyRFC exactly.
+
+- **Any instance number other than 00 was routed to instance 00**
+  ([erpl-pyrfc-issues#3](https://github.com/DataZooDE/erpl-pyrfc-issues/issues/3),
+  very probably [#1](https://github.com/DataZooDE/erpl-pyrfc-issues/issues/1)).
+  The connection handshake announced `localhost` and `sapdp00` whatever
+  `ashost` and `sysnr` were given, and the gateway routes to what the client
+  announces. Depending on the host, that failed as `partner ... not reached`
+  or reached a different instance and was refused logon. The handshake now
+  announces the caller's `ashost` and `sapdp<sysnr>`, byte for byte as SAP's
+  library does. Every test system so far was instance 00 on one host, where
+  the old values happened to be right.
+- **A gateway refusal surfaced as `RFC_PRO field at offset 0 is truncated`.**
+  The gateway reports an unreachable partner inside the Allocate reply, which
+  was not read. It is now raised at `Connection(...)` as `CommunicationError`
+  (`RFC_COMMUNICATION_FAILURE`) with the gateway's own text, as SAP's PyRFC
+  raises it.
+- **A malformed `sysnr` connected to instance 00.** Anything but exactly two
+  digits now raises `ExternalRuntimeError` (`RFC_INVALID_PARAMETER`, "Invalid
+  SYSNR format") before connecting, as SAP's PyRFC does. That includes `"0"`,
+  which SAP's library does not zero-pad.
+- The handshake no longer carries the host name, program name and OS user of
+  the machine its template was recorded on. It sends the caller's own, as SAP's
+  library does, so a gateway log names the real client.
+
 ## 2026.9.3
 
 Release gate run on 2026-09-03 against the a4h ABAP Platform Trial (kernel
