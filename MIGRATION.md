@@ -269,7 +269,66 @@ What does not survive is session state: anything set on that connection
 (a stateful function group's globals, an open unit of work) is gone. A
 *declared* exception is unaffected and leaves the session entirely intact.
 
+**An exception's `str()` is worded differently; its fields are not.** The class
+and every attribute a caller switches on (`code`, `key`, `msg_class`,
+`msg_type`, `msg_number`, `msg_v1`..`msg_v4`, `message`) match SAP's PyRFC,
+field for field, across every `RFC_RAISE_ERROR` method and message type and a
+short dump (measured on a4h, since 2026.11.19). Only the rendered text differs:
+
+```
+SAP PyRFC:  4 (rc=4): key=Function not supported, message=Function not supported [MSG: class=SR, type=E, number=006, v1-4:=Method = 0;;;]
+erpl-pyrfc: ID:SR Type:E Number:006 Function not supported
+```
+
+So match on the attributes, not on `str(error)`. Deliberately left as it is:
+the text is what existing logs and alerts here already match on, and nothing
+that inspects the exception's fields depends on it.
+
+**Caller mistakes are refused that SAP's PyRFC lets through.** An unknown
+connection parameter, an unknown `config` key and an unknown call option all
+raise `ExternalRuntimeError` (code 20, `RFC_INVALID_PARAMETER`). SAP's PyRFC
+accepts all three and ignores them, so a misspelt `ashost` there surfaces only
+as a connection failure much later. The one *known* option this affects is
+`not_requested`, which SAP's PyRFC supports and this package does not yet
+([#84](https://github.com/DataZooDE/erpl-proto/issues/84)): it is refused
+rather than silently ignored.
+
+Two smaller differences run the other way. `rstrip`, `dtime` and
+`return_import_params` work as **call** options here. SAP's PyRFC accepts them
+only in the connection's `config` and ignores them per call.
+
 ## Extensions beyond PyRFC
+
+- **Callbacks** — `conn.add_callback(func_name, handler)` answers a function
+  that ABAP calls back into this client while one of its calls is running
+  (`CALL FUNCTION ... DESTINATION 'BACK'`). SAP's PyRFC has no client-side
+  callbacks. The handler is written as for `pyrfc.Server.add_function`:
+  `handler(context, **imports)` returns a dict of exports, and an exception
+  with a `key` attribute is raised in ABAP as that exception. `context` has
+  `function` and `program`. `remove_callback(func_name)` stops answering.
+
+  ```python
+  def receive_package(context, **imports):
+      write(imports["IT_ROWS"])             # a table: a list of dicts
+      return {"EV_COUNT": len(imports["IT_ROWS"])}
+
+  conn.add_callback("Z_RECEIVE_PACKAGE", receive_package)
+  conn.call("Z_EXTRACT", IV_TABLE="EKKO")   # ABAP calls Z_RECEIVE_PACKAGE back
+  ```
+
+  The function is described when the callback is added, because nothing can be
+  described in the middle of a call. A callback survives the transparent
+  reopen after a `MESSAGE` failure. Without one, a callback fails the call as
+  SAP's PyRFC does: `ExternalRuntimeError`, code 17, `RFC_NOT_FOUND`, "Function
+  <name> not found".
+
+  Structures and tables come and go as `call()` gives and takes them. A
+  structure is a dict and a table a list of dicts, in the keyword arguments
+  and in the returned dict alike. Every table ABAP passed goes back to it, so
+  the handler's choices are:
+  - **leave a table out of the returned dict** to send it back unchanged;
+  - **return it** to send back the rows you give, edits included;
+  - **return `[]`** to empty it.
 
 - **wsRFC** — RFC over a WebSocket, which PyRFC had no equivalent for. Pass
   `wshost`, `wsport`, `tls_client_cert` and `tls_client_key` (optionally

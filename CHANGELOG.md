@@ -1,5 +1,65 @@
 # Changelog
 
+## 2026.11.20
+
+Release gate run on 2026-11-20 against the a4h ABAP Platform Trial (release
+816, kernel 9.16): **576 Rust tests and 293 Python tests passed, none failed and
+none skipped**, with SNC, wsRFC, the async driver and a message server live. The
+basXML padding failure recorded for 2026.11.19 is gone. Not run: 18 Rust tests
+marked `#[ignore]`, opt-in wsRFC probes whose ground the Python suite's wsRFC
+tests cover live. `tests/test_errors_caller.py` also passes 8/8 under SAP's
+PyRFC 3.3.1 (callbacks have no counterpart there to run against).
+
+### Added
+
+- **Callbacks** (`CALL FUNCTION ... DESTINATION 'BACK'`):
+  `Connection.add_callback(func_name, handler)` and `remove_callback`, an
+  extension beyond SAP's PyRFC ([erpl-pyrfc-issues#2](https://github.com/DataZooDE/erpl-pyrfc-issues/issues/2)).
+  Before this, a callback was read as the reply to the call in flight: a
+  *successful* call with no outputs, and a connection left out of step with the
+  server. Without a registered callback the call now fails as SAP's PyRFC fails
+  it. Structures and tables travel both ways: a handler receives a structure
+  as a dict and a table as a list of dicts. A table it returns goes back to
+  ABAP as given, and one it leaves out goes back unchanged, as with SAP's
+  library. See MIGRATION.md.
+
+### Fixed
+
+- **Caller-side errors are reported as SAP's PyRFC reports them**
+  ([#81](https://github.com/DataZooDE/erpl-proto/issues/81)). Each case was
+  measured against SAP's PyRFC 3.3.1, and `tests/test_errors_caller.py` passes
+  under both libraries:
+  - **A call on a closed connection** raises the base `RFCError`, "Remote
+    function module 'X' invocation rejected because the connection is closed".
+    It was `ExternalRuntimeError`, code 17.
+  - **Any other use of a closed connection** (`ping`,
+    `get_function_description`, units of work, `add_callback`) raises
+    `ExternalRuntimeError`, code 13, `RFC_INVALID_HANDLE`.
+    `get_connection_attributes()` on a closed connection returns `{}`.
+  - **An unknown parameter or structure field** is reported as "field 'X' not
+    found" (code 20, `RFC_INVALID_PARAMETER`, as before).
+  - **A table parameter that is not a list** raises `TypeError`.
+  - **Codes now agree with their keys.** A dropped connection
+    (`CommunicationError`, `RFC_CLOSED`) is code **6**, not 13. Every other
+    `ExternalRuntimeError` keyed `RFC_EXTERNAL_FAILURE` is code **15**, not 17.
+    17 is `RFC_NOT_FOUND`, which a missing callback still reports.
+- **Two systems in one process could share each other's metadata.** The
+  function-description cache was shared by every connection in the process and
+  keyed by function name alone, so a process connected to two systems whose
+  interface for a name differs could describe one system's function with the
+  other's layout, silently whenever the layout happened to fit. There is now
+  one shared cache per system, keyed by host and instance (or the wsRFC host,
+  and the SAProuter route where there is one)
+  ([#75](https://github.com/DataZooDE/erpl-proto/issues/75)).
+- **A short NUMC value reached ABAP as a different number.** NUMC was padded
+  with blanks like CHAR, so `"0"` for a NUMC 5 went out as `"0    "`, and
+  ABAP read something other than zero, silently. That affected every value
+  shorter than its field, whether passed as a string or an int. NUMC is now
+  right-aligned and zero-padded (`"00000"`), as SAP's library does. A value
+  wider than the field, and text that is not digits (`""`, `" 0"`, `"-1"`), is
+  refused with a `TypeError`, as SAP's PyRFC refuses it. A non-negative `int`
+  is still accepted, a leniency SAP's PyRFC does not have.
+
 ## 2026.11.19
 
 Release gate run on 2026-11-19 against the a4h ABAP Platform Trial (release
