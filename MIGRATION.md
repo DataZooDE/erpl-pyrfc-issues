@@ -288,10 +288,19 @@ that inspects the exception's fields depends on it.
 connection parameter, an unknown `config` key and an unknown call option all
 raise `ExternalRuntimeError` (code 20, `RFC_INVALID_PARAMETER`). SAP's PyRFC
 accepts all three and ignores them, so a misspelt `ashost` there surfaces only
-as a connection failure much later. The one *known* option this affects is
-`not_requested`, which SAP's PyRFC supports and this package does not yet
-([#84](https://github.com/DataZooDE/erpl-proto/issues/84)): it is refused
-rather than silently ignored.
+as a connection failure much later.
+
+**`not_requested` works as in SAP's PyRFC.** An export it names is not requested, so ABAP sees `IS REQUESTED`
+false, and it reads as its initial value. A table it names is neither sent nor
+requested, and reads as the rows you passed: **naming a table or a structure you
+pass also withholds what you passed**, so ABAP never sees it. An import or
+`CHANGING` scalar you supply is unaffected. Names must match exactly (`"ev_text"` excludes
+nothing), and a bare string names one parameter.
+
+**An initial date reads as `''`** in a call's result, as in SAP's PyRFC
+(`dtime=False`); it used to read `00000000`. Writing `''` back sends
+`00000000`. An initial time is still `000000`. A server or callback handler
+still receives `00000000` (unmeasured there).
 
 Two smaller differences run the other way. `rstrip`, `dtime` and
 `return_import_params` work as **call** options here. SAP's PyRFC accepts them

@@ -1,5 +1,62 @@
 # Changelog
 
+## 2026.11.21
+
+Release gate run on 2026-11-21 against the a4h ABAP Platform Trial (release
+816, kernel 9.16): **603 Rust tests and 310 Python tests passed, none failed and
+none skipped**, with SNC, wsRFC, the async driver and a message server live.
+Not run: 18 Rust tests marked `#[ignore]` (opt-in wsRFC probes). The new tests
+(`test_not_requested.py`, `test_errors_caller.py`) also pass under SAP's PyRFC
+3.3.1. erpl through the C-ABI shim: rfc 34/35 (the nwrfc-only backend file
+skips), bics 182/182.
+
+### Added
+
+- **`options={"not_requested": [...]}`**, as in SAP's PyRFC
+  ([#84](https://github.com/DataZooDE/erpl-proto/issues/84)). It was refused
+  as an unknown call option. Measured against SAP's PyRFC 3.3.1 on a4h, and
+  `tests/test_not_requested.py` passes under both libraries:
+  - an export it names is not requested (ABAP's `IS REQUESTED` is false) and
+    reads as its initial value;
+  - a table it names is neither sent nor requested, and reads as the rows that
+    were passed (`[]` for none);
+  - an import or `CHANGING` parameter the call supplies is unaffected;
+  - names must match exactly; an unknown one changes nothing;
+  - a bare string names one parameter, and anything but a list or a string
+    raises `AttributeError`.
+
+  With every output excluded, no output is requested at all. **Naming a table
+  or a structure you pass withholds it too**: setting a scalar's value makes it
+  requested again, but filling a table or a structure does not, so ABAP
+  receives neither (as with SAP's PyRFC).
+
+### Changed
+
+- **An initial date reads as `""` in a call's result, not `"00000000"`**, as
+  in SAP's PyRFC (`dtime=False`; measured on `BAPI_USER_GET_DETAIL` and
+  `RFCTEST`). Code comparing against `"00000000"` needs to compare against
+  `""`. Writing `""` back sends `00000000`, as SAP's PyRFC does, so a
+  read-modify-write keeps the date initial. An initial time is still
+  `"000000"`. A `pyrfc.Server` handler and a callback handler still receive
+  `"00000000"`: what SAP's PyRFC hands a server there has not been measured.
+
+### Fixed
+
+- **A logon with no user or no password was reported as
+  `RFC_PRO field at offset 0 is truncated`**, code 1
+  ([#85](https://github.com/DataZooDE/erpl-proto/issues/85)). The server ends
+  such a logon with an EBCDIC `FREE` record rather than an RFC_PRO reply. It is
+  now `CommunicationError`, code 6, `RFC_CLOSED`, as SAP's PyRFC reports it,
+  with the message SAP's PyRFC gives: `00024error during logon`, then the
+  record's padding as `\x80` characters.
+- **A DATE or TIME passed as `""` reached ABAP as blanks**, an invalid value
+  rather than the initial one. It goes as zeros, as SAP's PyRFC sends it
+  (captured).
+- **A structure field left out of a dict reached ABAP as blanks.** A DATE,
+  TIME or NUMC field is now sent as zeros, its ABAP initial value, as SAP's
+  library sends it. `STFC_STRUCTURE` echoed `RFCDATE` as eight blanks; now
+  `00000000`.
+
 ## 2026.11.20
 
 Release gate run on 2026-11-20 against the a4h ABAP Platform Trial (release
