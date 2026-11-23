@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.11.23
+
+Release gate run on 2026-11-23 against the a4h ABAP Platform Trial (release
+816, kernel 9.16): **664 Rust tests and 326 Python tests passed, none failed and
+none skipped**, with SNC, wsRFC, the async driver and a message server live.
+Not run: 18 Rust tests marked `#[ignore]` (opt-in wsRFC probes). erpl through the
+C-ABI shim, both backends: rfc 36/36, odp 27/27, bics 183/183.
+
+### Added
+
+- **bgRFC units**, with SAP's PyRFC 3.3.1's API: `initialize_unit(background=True)`,
+  `fill_and_submit_unit` with several `queue_names` and the reference's
+  `attributes`, `get_unit_state`, `confirm_unit`. Calls, return values and
+  errors were measured against PyRFC on a4h, and the state names against SAP's
+  SDK (spec BGR-14). `tests/test_bgrfc.py`; MIGRATION.md lists where this
+  package differs on purpose (the `background` default stays `False`; a state
+  can be read outside PyRFC's ship-to-confirm window).
+
+### Changed
+
+- **The shim is faster under parallel reads and on text.** Table cell reads
+  share the registry lock instead of queueing on one exclusive lock, and text is
+  converted to UTF-8 without allocating, with ASCII copied in one pass. On
+  erpl's 297,000-row DD04T read through the same shim, measured in one run,
+  it now takes 6.4 s against SAP's library's 7.0 s (erpl-proto #99, #102).
+- `fill_and_submit_unit(..., attributes=...)` on a classic unit raises
+  `RFCError` with the reference's wording instead of `NotImplementedError`, and
+  `initialize_unit(background=True)` no longer raises.
+
 ## 2026.11.21
 
 Release gate run on 2026-11-21 against the a4h ABAP Platform Trial (release

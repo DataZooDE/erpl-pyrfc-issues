@@ -25,6 +25,7 @@ stop after the first table.
 | `Throughput` monitoring | works — same seven `stats` keys |
 | `pyrfc.Server`: `add_function`, `serve`, `start`/`stop` | works |
 | tRFC/qRFC: `initialize_unit`, `fill_and_submit_unit`, `confirm_unit`, `destroy_unit` | works |
+| bgRFC: `initialize_unit(background=True)`, `fill_and_submit_unit` with several `queue_names` and `attributes`, `get_unit_state`, `confirm_unit` | works — see *Background units* below; the default of `background` differs |
 
 ## Type mapping
 
@@ -75,6 +76,53 @@ conn.confirm_unit(unit)          # this is what releases the work
 Pass `queue_names=["MY_QUEUE"]` for qRFC. `destroy_unit(unit)` abandons without
 confirming, leaving the TID on the server so the work can be retried.
 
+### Background units (bgRFC)
+
+```python
+unit = conn.initialize_unit(background=True)
+conn.fill_and_submit_unit(unit, [("Z_MY_FUNCTION", {"IV_TEXT": "now"})])
+conn.get_unit_state(unit)        # 'committed'
+conn.confirm_unit(unit)          # releases the system's record of the unit
+```
+
+The calls, return values and errors are SAP's PyRFC 3.3.1's, measured against
+it on a4h: the unit dict (`background`, `id` -- 32 hex characters -- and
+`queued`), `fill_and_submit_unit` returning that dict with `queued` set,
+`get_unit_state` returning a `UnitState` member name, several `queue_names` for
+a type-Q unit, and the reference's `attributes` keywords (`kernel_trace`,
+`sat_trace`, `unit_history`, `lock`, `no_commit_check`, `user`, `client`,
+`t_code`, `program`; an unknown key is ignored, as there).
+
+What a state means (spec BGR-14): `committed` once shipped, `confirmed` after
+`confirm_unit`, `rolled_back` when a call in it failed, `not_found` for an id
+the system holds no unit under. A type-T unit **runs during the ship**, so a
+call that fails in ABAP raises from `fill_and_submit_unit`, as it does in the
+reference.
+
+Where this package differs, on purpose:
+
+- **The default of `background`.** PyRFC's `initialize_unit()` starts a bgRFC
+  unit; this one starts a classic tRFC unit, as it always has. Pass
+  `background=True` explicitly -- code that does runs the same under both.
+- **The state can be read at any time.** PyRFC answers `get_unit_state` only
+  between the ship and the confirm, for the unit it is holding (*"No unit handle
+  for this connection available"* otherwise), and refuses after a failed ship
+  (`RFC_INVALID_HANDLE`). The system itself answers outside that window, so
+  this package asks it: after a confirm the state is `confirmed`, for a failed
+  unit `rolled_back`, and a unit dict from another connection or process works.
+- **Several units may be open at once.** PyRFC holds one unit per connection
+  and refuses a second (*"There is an active unit for this connection"*). Here
+  a unit is only its dict, so nothing is held between the steps.
+- **`destroy_unit` sends nothing** and returns `None`, as there; the server
+  keeps the unconfirmed unit.
+- **A state code nobody has named yet** -- the reference's `in_process` has not
+  been provoked, so its code is not known -- raises `ExternalRuntimeError`
+  carrying the code rather than guessing a name.
+
+Measuring this found a crash in the reference: PyRFC 3.3.1 segfaults on
+`destroy_unit` after a `fill_and_submit_unit` that raised `TypeError` (an empty
+`calls` list). This package has no unit handle to dangle.
+
 ## The module surface
 
 Every module-level name PyRFC exposed is here: `cancel_connection`,
@@ -122,31 +170,6 @@ package raises.
 These are not planned. If your code needs one, this package is not a drop-in for
 you:
 
-- **bgRFC units** (`RfcCreateUnit`/`SubmitUnit` and the background unit API).
-  `initialize_unit(background=True)` raises `NotImplementedError`. Classic tRFC
-  and qRFC are in scope; bgRFC is not.
-
-  This one is a real difference, and it is worth being precise about it, since
-  PyRFC's own docstring says *"The background protocol (bgRFC) is not working in
-  the current version"*. **That warning is stale** — measured against a live
-  system, PyRFC 3.3.1 creates a unit, ships it, sees it reach `committed` and
-  confirms it, both plain and queued. So code that relies on bgRFC does work
-  today and will not work here.
-
-  Three consequences beyond the protocol itself:
-
-  - `get_unit_state` does not exist here at all. In PyRFC it is bgRFC-only —
-    asking it about a classic unit is refused with *"No state check possible of
-    non-bgRFC units"* — so it is only useful once bgRFC is.
-  - `attributes` is rejected, and `queue_names` accepts exactly one name where
-    a bgRFC unit may carry several.
-  - **The default differs.** PyRFC's `initialize_unit()` defaults to
-    `background=True`; this one defaults to `False`. A caller who wrote
-    `initialize_unit()` and meant bgRFC gets a classic tRFC unit here, silently.
-    Pass `background=` explicitly if it matters.
-
-  What the protocol looks like on the wire is recorded in
-  `docs/spec/20-bgrfc.md`.
 - `reset_server_context()`, `free()` — each raises `NotImplementedError`
   pointing here rather than pretending to work.
 
