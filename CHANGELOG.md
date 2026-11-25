@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026.11.25
+
+Release gate run on 2026-11-25 against the a4h ABAP Platform Trial (release
+816, kernel 9.16): **394 Rust tests and 300 Python tests passed, none failed**.
+Not run: 18 Rust tests marked `#[ignore]` (opt-in wsRFC probes). All 252 values of
+erpl's boundary-value fixture match SAP's PyRFC 3.3.1. erpl through the C-ABI shim:
+odp 26/26, bics 182/182, rfc 33 passed and 1 failing that fails on erpl's master
+too (`sap_rfc_invoke_fuzz.test:332`, a4h's BAPI address data).
+
+### Changed
+
+- **UTCLONG reads as SAP's PyRFC reads it** (erpl-proto #109): `YYYY-MM-DDTHH:MM:SS.fffffff`,
+  and the initial value as `0000-00-00T00:00:00.0000000` instead of `''`. Code that
+  tested a UTCLONG for `''` must test for the zero timestamp. Compared value by value
+  with SAP's PyRFC 3.3.1 over all 252 values of erpl's boundary-value fixture
+  `Z_ERPL_TYPES_BV`; before this, 7 of them (the UTCLONG ones) differed.
+
+### Faster
+
+- **Large replies use less memory and fewer instructions.** A large reply is
+  now mapped by the library itself and unmapped when it is dropped, so freeing it
+  no longer lets glibc raise its mmap threshold and fragment the host's heap; the
+  host's allocator settings are untouched (Linux glibc; musl, macOS and Windows
+  keep the plain buffer). Decompression copies back-references in bulk. On erpl's
+  297,000-row DD04T read through the same core, peak memory is 40-50% lower and
+  instructions 37% fewer than in the previous release (erpl-proto #107).
+
 ## 2026.11.23
 
 Release gate run on 2026-11-23 against the a4h ABAP Platform Trial (release
